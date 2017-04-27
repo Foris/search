@@ -10,6 +10,7 @@ import collections
 
 class TimeoutError(Exception):
     """Exception raised when a function call times out."""
+
     pass
 
 
@@ -254,8 +255,6 @@ class IterativeDepthFirstSearch(BestFirstSearch):
 
         start = time.time()
         initial_state = initial_state or problem.initial_state()
-        initial_heuristic_value = initial_state.value + self.heuristic(
-            initial_state)
 
         queue = self.create_queue()
         seen = self.create_seen_set()
@@ -343,7 +342,7 @@ class IterativeDepthFirstSearch(BestFirstSearch):
                     self.push(queue, state, value=value)
                     self.add_to_seen(state, seen, problem)
 
-            else: # No way to continue this run
+            else:  # No way to continue this run
                 break
 
         return current_state if reached_solution else None
@@ -387,7 +386,7 @@ class GreedySearch(Search):
                 break
 
             current_state = self.pop(queue)
-            if current_state.value > best_value:
+            if current_state.value >= best_value and len(seen) > 1:
                 break
             else:
                 best_solution = current_state
