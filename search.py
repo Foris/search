@@ -2,9 +2,13 @@
 # -*- coding: utf-8 -*-
 """Algorithms for search."""
 import abc
+import sys
 import six
+import math
 import time
 import heapq
+import utils
+import random
 import collections
 
 
@@ -18,7 +22,6 @@ class TimeoutError(Exception):
 class Search:
     """A type of search."""
 
-    @abc.abstractmethod
     def create_queue(self):
         """Create a queue for storing the states in the search."""
         raise NotImplementedError()
@@ -41,12 +44,10 @@ class Search:
             self.push(queue, state)
             self.add_to_seen(state, seen, problem)
 
-    @abc.abstractmethod
     def push(self, queue, state):
         """Add a state to the queue."""
         raise NotImplementedError()
 
-    @abc.abstractmethod
     def pop(self, queue):
         """Get the next state from the queue."""
         raise NotImplementedError()
@@ -351,19 +352,44 @@ class IterativeDepthFirstSearch(BestFirstSearch):
 class GreedySearch(Search):
     """A greedy search."""
 
-    def create_queue(self):
-        """Create a queue for storing the states in the search."""
-        return []
+    def solve(self, problem, initial_state=None, timeout=None):
+        """Get a solution to the problem."""
+        if not timeout:
+            timeout = float('inf')
 
-    def push(self, queue, state):
-        """Add a state to the queue."""
-        if not queue or queue[0].value > state.value:
-            del queue[:]
-            queue.append(state)
+        start = time.time()
+        current_state = initial_state or problem.initial_state()
 
-    def pop(self, queue):
-        """Get the next state from the queue."""
-        return queue.pop()
+        best_solution = current_state
+        best_value = current_state.value
+
+        while current_state:
+            current = time.time()
+            if current - start > timeout:
+                break
+
+            neighbours = self.branch(problem, current_state)
+            if neighbours:
+                next_state = utils.argmin_random_tie(
+                    neighbours,
+                    key=lambda state: state.value
+                )
+                if next_state and next_state.value >= best_value:
+                    next_state = None
+            else:
+                next_state = None
+
+            current_state = next_state
+
+        return best_solution
+
+
+class SimulatedAnnealing(Search):
+    """SimulatedAnnealing search implementation taken from aima-python."""
+
+    def __init__(self, schedule=utils.exp_schedule()):
+        """Initialize the Simulated Annealing with a schedule function."""
+        self.schedule = schedule
 
     def solve(self, problem, initial_state=None, timeout=None):
         """Get a solution to the problem."""
@@ -371,30 +397,28 @@ class GreedySearch(Search):
             timeout = float('inf')
 
         start = time.time()
-        initial_state = initial_state or problem.initial_state()
+        current_state = initial_state or problem.initial_state()
 
-        seen = self.create_seen_set()
-        queue = self.create_queue()
-        self.push_if_new(queue, initial_state, seen, problem)
+        best_solution = current_state
+        best_value = current_state.value
 
-        best_solution = initial_state
-        best_value = initial_state.value
-
-        while len(queue) > 0:
+        for _t in xrange(sys.maxsize):
+            st = self.schedule(_t)
             current = time.time()
-            if current - start > timeout:
+            if current - start > timeout or st == 0:
                 break
 
-            current_state = self.pop(queue)
-            if current_state.value >= best_value and len(seen) > 1:
+            neighbours = self.branch(problem, current_state)
+            if not neighbours:
                 break
-            else:
-                best_solution = current_state
-                best_value = current_state.value
 
-            branched_states = self.branch(problem, current_state)
-            for branched_state in branched_states:
-                self.push_if_new(queue, branched_state, seen, problem)
+            next_state = random.choice(neighbours)
+            delta_e = next_state.value.diff(current_state.value)
+            if delta_e <= 0 or utils.probability(math.exp(-delta_e / st)):
+                current_state = next_state
+                if current_state.value < best_value:
+                    best_solution = current_state
+                    best_value = current_state.value
 
         return best_solution
 

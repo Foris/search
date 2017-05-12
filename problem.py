@@ -3,6 +3,7 @@
 """Classes needed to model a search algorithm."""
 import abc
 import six
+import itertools
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -47,6 +48,11 @@ class Action:
 class State:
     """(Intermediate) State in the search for a solution."""
 
+    @property
+    def value(self):
+        """Get the value wrapped."""
+        return ValueWrapper(self._value)
+
     @abc.abstractmethod
     def __hash__(self):
         """Get a unique hash for the state."""
@@ -62,6 +68,97 @@ class State:
     def __ne__(self, other):
         """Check whether the other object is not equal."""
         return not self.__eq__(other)
+
+
+class ValueWrapper:
+    """Wrapper around the state's values that allows tuple comparisons."""
+
+    def __init__(self, value):
+        """Initialize the value."""
+        self.value = value
+
+    def diff(self, other):
+        """Difference."""
+        if isinstance(other, self.__class__):
+            if isinstance(self.value, tuple) and isinstance(
+                    other.value, tuple):
+                return max(tuple(
+                    ((a - b) / max(abs(a), abs(b))) if a != 0 or b != 0 else 0
+                    for a, b in itertools.izip(
+                        self.value, other.value)
+                ))
+            else:
+                if self.value != 0 or other.value != 0:
+                    return (self.value - other.value) / max(
+                        abs(self.value), abs(other.value))
+                else:
+                    return 0
+        else:
+            return self.diff(ValueWrapper(other))
+
+    def __add__(self, other):
+        """Add two values."""
+        if isinstance(other, self.__class__):
+            if isinstance(self.value, tuple) and isinstance(
+                    other.value, tuple):
+                return tuple(a + b for a, b in itertools.izip(
+                    self.value, other.value)
+                )
+            else:
+                return self.value + other.value
+        else:
+            return self + ValueWrapper(other)
+
+    def __ge__(self, other):
+        """Check whether the right value is not greater."""
+        return other <= self
+
+    def __le__(self, other):
+        """Check whether the right value is not lesser."""
+        if isinstance(other, self.__class__):
+            return not other > self
+        else:
+            return False
+
+    def __gt__(self, other):
+        """Check whether the left value is greater."""
+        return other < self
+
+    def __lt__(self, other):
+        """
+        Check whether the left value is lesser.
+
+        Use something like product order for tuples.
+        """
+        if isinstance(other, self.__class__):
+            if isinstance(self.value, tuple) and isinstance(
+                    other.value, tuple):
+                any_lt = False
+                for a, b in itertools.izip(self.value, other.value):
+                    if a > b:
+                        return False
+                    any_lt |= a < b
+
+                return any_lt
+            else:
+                return self.value < other.value
+        else:
+            return False
+
+    def __hash__(self):
+        """Get a unique hash for the value."""
+        return hash(tuple(self.value))
+
+    def __ne__(self, other):
+        """Check whether the object is not the same."""
+        return self.value != other and \
+            not isinstance(other, self.__class__) or self.value != other.value
+
+    def __eq__(self, other):
+        """Check whether the other object is equal."""
+        return (isinstance(
+            other, self.__class__) and self.value == other.value) \
+            or self.value == other
 
 
 class ShortestPathProblem(Problem):
@@ -146,7 +243,7 @@ class ShortestPathState(State):
         [1]
         """
         self.index = index
-        self.value = value
+        self._value = value
         self.path = path or [index]
 
     def __repr__(self):
@@ -160,7 +257,7 @@ class ShortestPathState(State):
         [{index: 1, value: 2, path: [1]}]
         """
         return "{index: %s, value: %s, path: %s}" % (
-            self.index, self.value, self.path)
+            self.index, self._value, self.path)
 
     def __hash__(self):
         """
